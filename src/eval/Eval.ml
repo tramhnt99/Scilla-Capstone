@@ -49,6 +49,9 @@ let reserved_names =
       | LibTyp (tname, _) -> get_id tname)
     RecursionPrinciples.recursion_principles
 
+(*Global reference for logging*)
+let logging = ref []
+
 (* Printing result *)
 let pp_result r exclude_names gas_remaining =
   let enames = List.append exclude_names reserved_names in
@@ -58,9 +61,10 @@ let pp_result r exclude_names gas_remaining =
       let filter_prelude (k, _) =
         not @@ List.mem enames k ~equal:[%equal: EvalName.t]
       in
-      sprintf "%s,\n%s\nGas remaining: %s" (Env.pp_value e)
+      (sprintf "%s,\n%s\nGas remaining: %s" (Env.pp_value e)
         (Env.pp ~f:filter_prelude env)
-        (Stdint.Uint64.to_string gas_remaining)
+        (Stdint.Uint64.to_string gas_remaining)) ^ 
+      (String.concat ~sep:"\n" !logging) 
 
 (* Makes sure that the literal has no closures in it *)
 (* TODO: Augment with deep checking *)
@@ -279,6 +283,7 @@ let rec exp_eval erep env =
 
 (* Applying a function *)
 and try_apply_as_closure v arg =
+  let%bind _ = log_app_closure v arg in
   match v with
   | Clo clo -> clo arg
   | _ -> fail0 @@ sprintf "Not a functional value: %s." (Env.pp_value v)
@@ -287,6 +292,18 @@ and try_apply_as_type_closure v arg_type =
   match v with
   | TAbs tclo -> tclo arg_type
   | _ -> fail0 @@ sprintf "Not a type closure: %s." (Env.pp_value v)
+
+and log_app_closure v arg = 
+  match v with
+  | Clo _ -> 
+      begin
+        logging := !logging @ [
+            (sprintf "Closure %s" (Env.pp_value v))
+            ^ (sprintf " applied to argument %s." (Env.pp_value arg))
+          ];
+        pure v
+    end
+  | _ -> fail0 @@ sprintf "Logging: Not a type closure: %s." (Env.pp_value v)
 
 (* [Initial Gas-Passing Continuation]
 
