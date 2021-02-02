@@ -114,6 +114,12 @@ module type ScillaLiteral = sig
 
   module Bystrx : BYSTRX
 
+  (* module ER: Syntax.Rep
+  type log = (ER.rep LType.TIdentifier.t * ER.rep LType.TIdentifier.t) List.t * String.t List.t *)
+  (* type log = ((LType.TIdentifier.Name.t * LType.TIdentifier.Name.t) List.t * String.t List.t) *)
+  type log = (((String.t * LType.t option) * (String.t * LType.t option)) List.t * String.t List.t)
+  
+
   type t =
     | StringLit of string
     (* Cannot have different integer literals here directly as Stdint does not derive sexp. *)
@@ -136,8 +142,10 @@ module type ScillaLiteral = sig
         ( t,
           scilla_error list,
           uint64 ->
-          ( (t * (LType.TIdentifier.Name.t * t) list) * uint64,
-            scilla_error list * uint64 )
+          log ->
+          ( (t * (LType.TIdentifier.Name.t * t) list) * uint64 * 
+            log,
+            scilla_error list * uint64 * log)
           result )
         CPSMonad.t)
     (* A type abstraction *)
@@ -146,8 +154,9 @@ module type ScillaLiteral = sig
         ( t,
           scilla_error list,
           uint64 ->
-          ( (t * (LType.TIdentifier.Name.t * t) list) * uint64,
-            scilla_error list * uint64 )
+          log ->
+          ( (t * (LType.TIdentifier.Name.t * t) list) * uint64 * log,
+            scilla_error list * uint64 * log)
           result )
         CPSMonad.t)
   [@@deriving sexp]
@@ -337,6 +346,9 @@ module MkLiteral (T : ScillaType) = struct
     let to_bystr = Fn.id
   end
 
+  (* type log = ((LType.TIdentifier.Name.t * LType.TIdentifier.Name.t) List.t * String.t List.t) *)
+  type log = (((String.t * LType.t option) * (String.t * LType.t option)) List.t * String.t List.t)
+
   type t =
     | StringLit of string
     (* Cannot have different integer literals here directly as Stdint does not derive sexp. *)
@@ -359,8 +371,9 @@ module MkLiteral (T : ScillaType) = struct
         ( t,
           scilla_error list,
           uint64 ->
-          ( (t * (LType.TIdentifier.Name.t * t) list) * uint64,
-            scilla_error list * uint64 )
+          log ->
+          ( (t * (LType.TIdentifier.Name.t * t) list) * uint64 * log,
+            scilla_error list * uint64 * log)
           result )
         CPSMonad.t)
     (* A type abstraction *)
@@ -369,8 +382,9 @@ module MkLiteral (T : ScillaType) = struct
         ( t,
           scilla_error list,
           uint64 ->
-          ( (t * (LType.TIdentifier.Name.t * t) list) * uint64,
-            scilla_error list * uint64 )
+          log ->
+          ( (t * (LType.TIdentifier.Name.t * t) list) * uint64 * log,
+            scilla_error list * uint64 * log)
           result )
         CPSMonad.t)
   [@@deriving sexp]

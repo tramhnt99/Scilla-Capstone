@@ -235,6 +235,40 @@ module EvalMonad = struct
       op_thunk () k (Uint64.sub remaining_gas cost)
     else k (Error emsg) remaining_gas
 
+
+  (* [Log functions] *)
+
+    (* Monadic evaluation results *)
+  let fail_log s k remaining_gas current_log = k (Error s) remaining_gas current_log
+
+  (* fail with just a message, no location info. *)
+  let fail0_log (msg : string) = fail_log @@ mk_error0 msg
+
+  (* fail with a message and start location. *)
+  let fail1_log msg sloc = fail_log @@ mk_error1 msg sloc
+
+  (* fail with a message and both start and end locations. *)
+  let fail2_log msg sloc eloc = fail_log @@ mk_error2 msg sloc eloc
+
+  let fromR_log r =
+    match r with Core_kernel.Error s -> fail_log s | Core_kernel.Ok a -> pure a
+
+  let update_log prev newl = 
+    let v1, s1 = prev in
+    let v2, s2 = newl in
+    (v1 @ v2), (s1 @ s2)
+
+  let checkwrap_opR_log op_thunk cost log k remaining_gas current_log =
+    if Uint64.compare remaining_gas cost >= 0 then
+      let res = op_thunk () in
+      k res (Uint64.sub remaining_gas cost) (update_log current_log log)
+    else k (Error out_of_gas_err) remaining_gas (update_log current_log log)
+
+  let checkwrap_op_log op_thunk cost emsg log k remaining_gas current_log =
+    if Uint64.compare remaining_gas cost >= 0 then
+      op_thunk () k (Uint64.sub remaining_gas cost) (update_log current_log log)
+    else k (Error emsg) remaining_gas (update_log current_log log)
+
   open Let_syntax
 
   (* Monadic fold-left for error *)

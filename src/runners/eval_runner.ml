@@ -27,6 +27,7 @@ open PrettyPrinters
 open Result.Let_syntax
 open ParserUtil
 open MonadUtil
+open SemanticsUtil
 module RG = Gas.ScillaGas (ParserRep) (ParserRep)
 
 (* Stdlib are implicitly imported, so we need to use local names in the parser *)
@@ -72,6 +73,8 @@ let run () =
     if Stdint.Uint64.(compare cli.gas_limit zero = 0) then default_gas_limit
     else cli.gas_limit
   in
+  let print_semantics = cli.p_seman in
+  let seman_file = cli.o_seman in
   match FEParser.parse_expr_from_file filename with
   | Ok e_nogas -> (
       StdlibTracker.add_stdlib_dirs cli.stdlib_dirs;
@@ -89,17 +92,25 @@ let run () =
           in
           (* Since this is not a contract, we have no in-contract lib defined. *)
           let envres = Eval.init_libraries None elibs in
-          let env, gas_remaining =
-            match envres Eval.init_gas_kont gas_limit with
-            | Ok (env', gas_remaining) -> (env', gas_remaining)
-            | Error (err, gas_remaining) -> fatal_error_gas err gas_remaining
+          let env, gas_remaining, current_log =
+            match envres Eval.init_gas_kont gas_limit SemanticsUtil.init_log with
+            | Ok (env', gas_remaining, current_log) -> 
+              (env', gas_remaining, current_log)
+            | Error (err, gas_remaining, _) -> fatal_error_gas err gas_remaining
           in
           let lib_fnames = List.map ~f:(fun (name, _) -> name) env in
-          let res' = Eval.(exp_eval dis_e env init_gas_kont gas_remaining) in
+          let res' = Eval.(exp_eval dis_e env init_gas_kont gas_remaining current_log) in
           match res' with
-          | Ok (_, gas_remaining) ->
-              printf "%s\n" (Eval.pp_result res' lib_fnames gas_remaining)
-          | Error (el, gas_remaining) -> fatal_error_gas el gas_remaining )
+          | Ok (_, gas_remaining, current_log) ->
+              printf "%s\n" (Eval.pp_result res' lib_fnames gas_remaining);
+              if print_semantics then 
+                (printf "And semantics collected after exp_eval are \n";
+                print_string @@ output_seman current_log);
+                (* List.iter (snd current_log) ~f:(fun x -> print_string (x ^ "\n"))); *)
+              if not (String.is_empty seman_file) then
+                  Out_channel.with_file seman_file ~f:(fun ch ->
+                  Out_channel.output_string ch (output_seman current_log))
+          | Error (el, gas_remaining, _) -> fatal_error_gas el gas_remaining )
       | Error e -> fatal_error e )
   | Error e -> fatal_error e
 

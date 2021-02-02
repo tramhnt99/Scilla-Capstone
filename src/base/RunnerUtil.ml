@@ -192,6 +192,8 @@ type runner_cli = {
   cf_token_fields : string list;
   p_contract_info : bool;
   p_type_info : bool;
+  p_seman : bool;
+  o_seman: string;
 }
 
 let parse_cli args ~exe_name =
@@ -206,6 +208,8 @@ let parse_cli args ~exe_name =
   let r_cf = ref false in
   let r_cf_token_fields = ref [] in
   let r_validate_json = ref true in
+  let r_print_semantics = ref false in
+  let r_seman = ref "" in
 
   let speclist =
     [
@@ -264,6 +268,12 @@ let parse_cli args ~exe_name =
       ( "-disable-validate-json",
         Arg.Unit (fun () -> r_validate_json := false),
         "Disable validation of input JSONs" );
+      ( "-print-seman",
+        Arg.Unit (fun () -> r_print_semantics := true),
+        "Printing runtime collected semantics");
+      ( "-output-seman", 
+        Arg.String (fun x -> r_seman := x),
+        "Path to output collected semantics")
     ]
   in
 
@@ -306,4 +316,6 @@ let parse_cli args ~exe_name =
     cf_token_fields = !r_cf_token_fields;
     init_file = !r_init_file;
     p_type_info = !r_type_info;
+    p_seman = !r_print_semantics;
+    o_seman = !r_seman;
   }

@@ -43,8 +43,8 @@ module RunnerName = RunnerSyntax.SIdentifier.Name
 let check_libs clibs elibs name gas_limit =
   let ls = init_libraries clibs elibs in
   (* Are libraries ok? *)
-  match ls Eval.init_gas_kont gas_limit with
-  | Ok (res, gas_remaining) ->
+  match ls Eval.init_gas_kont gas_limit SemanticsUtil.init_log  with
+  | Ok (res, gas_remaining, _) ->
       plog
         (sprintf
            "\n\
@@ -57,17 +57,17 @@ let check_libs clibs elibs name gas_limit =
                    EvalUtil.EvalName.as_string (fst x))))
            name);
       gas_remaining
-  | Error (err, gas_remaining) ->
+  | Error (err, gas_remaining, _) ->
       fatal_error_gas_scale Gas.scale_factor err gas_remaining
 
 (****************************************************)
 (*     Checking initialized contract state          *)
 (****************************************************)
 let check_extract_cstate name res gas_limit =
-  match res Eval.init_gas_kont gas_limit with
-  | Error (err, remaining_gas) ->
+  match res Eval.init_gas_kont gas_limit SemanticsUtil.init_log with
+  | Error (err, remaining_gas, _) ->
       fatal_error_gas_scale Gas.scale_factor err remaining_gas
-  | Ok ((_, cstate, field_vals), remaining_gas) ->
+  | Ok ((_, cstate, field_vals), remaining_gas, _) ->
       plog (sprintf "[Initializing %s's fields]\nSuccess!\n" name);
       (cstate, remaining_gas, field_vals)
 
@@ -76,10 +76,10 @@ let check_extract_cstate name res gas_limit =
 (*****************************************************)
 
 let check_after_step res gas_limit =
-  match res Eval.init_gas_kont gas_limit with
-  | Error (err, remaining_gas) ->
+  match res Eval.init_gas_kont gas_limit SemanticsUtil.init_log with
+  | Error (err, remaining_gas, _) ->
       fatal_error_gas_scale Gas.scale_factor err remaining_gas
-  | Ok ((cstate, outs, events, accepted_b), remaining_gas) ->
+  | Ok ((cstate, outs, events, accepted_b), remaining_gas, _) ->
       plog
         ( sprintf "Success! Here's what we got:\n"
         (* sprintf "%s" (ContractState.pp cstate) ^ *)
