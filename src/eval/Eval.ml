@@ -51,6 +51,7 @@ let reserved_names =
 
 (*Global reference for logging*)
 let logging = ref []
+let monad_logging = ref []
 
 (* Printing result *)
 let pp_result r exclude_names gas_remaining =
@@ -152,7 +153,20 @@ let builtin_executor env f args_id =
   in
   let%bind cost = fromR @@ builtin_cost env f tps args_id in
   let res () = op arg_lits ret_typ in
-  checkwrap_opR res (Uint64.of_int cost)
+  checkwrap_opR_log res (Uint64.of_int cost) []
+
+(*   
+
+(unit ->
+ (('a, 'b) Core_kernel._result -> Stdint.Uint64.t -> 'c) ->
+ Stdint.Uint64.t -> 'c) ->
+Stdint.Uint64.t ->
+'b ->
+(('a, 'b) Core_kernel._result -> Stdint.Uint64.t -> 'c) ->
+Stdint.Uint64.t -> 'c
+
+*)
+
 
 (*******************************************************)
 (* A monadic big-step evaluator for Scilla expressions *)
@@ -165,7 +179,12 @@ let builtin_executor env f args_id =
    type as described in [Specialising the Return Type of Closures].
  *)
 
-let rec exp_eval erep env =
+let rec exp_eval erep env : (Scilla_eval.EvalUtil.EvalSyntax.SLiteral.t *
+                             (Scilla_eval__EvalUtil.EvalName.t,
+                              Scilla_eval.EvalUtil.EvalSyntax.SLiteral.t)
+                               Core_kernel.List.Assoc.t, Scilla_base.ErrorUtils.scilla_error list,
+                             Stdint.Uint64.t -> 'a Base__List.t -> 'b)
+    Scilla_base__MonadUtil.CPSMonad.t =
   let e, loc = erep in
   match e with
   | Literal l -> pure (l, env)
@@ -219,7 +238,7 @@ let rec exp_eval erep env =
       in
       let alen = List.length actuals in
       if constr.arity <> alen then
-        fail1
+        fail1_log
           (sprintf "Constructor %s expects %d arguments, but got %d."
              (as_error_string cname) constr.arity alen)
           (SR.get_loc (get_rep cname))
@@ -251,13 +270,14 @@ let rec exp_eval erep env =
   | Builtin (i, actuals) ->
       let%bind res = builtin_executor env i actuals in
       pure (res, env)
+      (* failwith "to be fixed" *)
   | Fixpoint (g, _, body) ->
       let rec fix arg =
         let env1 = Env.bind env (get_id g) clo_fix in
         let%bind fbody, _ = exp_eval body env1 in
         match fbody with
         | Clo f -> f arg
-        | _ -> fail0 "Cannot apply fxpoint argument to a value"
+        | _ -> fail0_log "Cannot apply fxpoint argument to a value"
       and clo_fix = Clo fix in
       pure (clo_fix, env)
   | TFun (tv, body) ->
@@ -279,19 +299,21 @@ let rec exp_eval erep env =
       let%bind cost = fromR @@ eval_gas_charge env g in
       let emsg = sprintf "Ran out of gas.\n" in
       (* Add end location too: https://github.com/Zilliqa/scilla/issues/134 *)
-      checkwrap_op thunk (Uint64.of_int cost) (mk_error1 emsg loc)
+      checkwrap_op_log thunk (Uint64.of_int cost) (mk_error1 emsg loc)
+
+      
 
 (* Applying a function *)
 and try_apply_as_closure v arg =
   let%bind _ = log_app_closure v arg in
   match v with
   | Clo clo -> clo arg
-  | _ -> fail0 @@ sprintf "Not a functional value: %s." (Env.pp_value v)
+  | _ -> fail0_log @@ sprintf "Not a functional value: %s." (Env.pp_value v)
 
 and try_apply_as_type_closure v arg_type =
   match v with
   | TAbs tclo -> tclo arg_type
-  | _ -> fail0 @@ sprintf "Not a type closure: %s." (Env.pp_value v)
+  | _ -> fail0_log @@ sprintf "Not a type closure: %s." (Env.pp_value v)
 
 and log_app_closure v arg = 
   match v with
@@ -303,7 +325,7 @@ and log_app_closure v arg =
           ];
         pure v
     end
-  | _ -> fail0 @@ sprintf "Logging: Not a type closure: %s." (Env.pp_value v)
+  | _ -> fail0_log @@ sprintf "Logging: Not a type closure: %s." (Env.pp_value v)
 
 (* [Initial Gas-Passing Continuation]
 
@@ -312,8 +334,8 @@ and log_app_closure v arg =
    the result, but also the remaining gas.
 
 *)
-let init_gas_kont r gas' =
-  match r with Ok z -> Ok (z, gas') | Error msg -> Error (msg, gas')
+let init_gas_kont r gas' log' =
+  match r with Ok z -> Ok (z, gas', log') | Error msg -> Error (msg, gas', log')
 
 (* [Continuation for Expression Evaluation]
 
@@ -326,12 +348,18 @@ let init_gas_kont r gas' =
    the result is passed further to the callee's continuation `k`.
 
 *)
-let exp_eval_wrapper_no_cps expr env k gas =
-  let eval_res = exp_eval expr env init_gas_kont gas in
-  let res, remaining_gas =
-    match eval_res with Ok (z, g) -> (Ok z, g) | Error (m, g) -> (Error m, g)
+let exp_eval_wrapper_no_cps expr env k gas log =
+  let eval_res = exp_eval expr env init_gas_kont gas log in
+  let res, remaining_gas, current_log =
+    match eval_res with 
+      |  Ok (z, g, l) -> 
+          (monad_logging := l;
+          (Ok z, g, l))
+      | Error (m, g, l) -> 
+          (monad_logging := l;
+          (Error m, g, l))
   in
-  k res remaining_gas
+  k res remaining_gas current_log
 
 open EvalSyntax
 
@@ -450,14 +478,14 @@ let rec stmt_eval conf stmts =
                   endl = dummy_loc;
                 })
           in
-          fail (err @ elist)
+          fail_log (err @ elist)
       | GasStmt g ->
           let%bind cost = fromR @@ eval_gas_charge conf.env g in
           let err =
             mk_error1 "Ran out of gas after evaluating statement" sloc
           in
           let remaining_stmts () = stmt_eval conf sts in
-          checkwrap_op remaining_stmts (Uint64.of_int cost) err )
+          checkwrap_op_log remaining_stmts (Uint64.of_int cost) err [])
 
 and try_apply_as_procedure conf proc proc_rest actuals =
   (* Create configuration for procedure call *)
@@ -508,7 +536,7 @@ let check_blockchain_entries entries =
   in
   if c1 && c2 then pure entries
   else
-    fail0
+    fail0_log
     @@ sprintf
          "Mismatch in input blockchain variables:\n\
           expected:\n\
@@ -526,7 +554,7 @@ let eval_constraint cconstraint env =
   let%bind contract_val, _ = exp_eval_wrapper_no_cps cconstraint env in
   match contract_val with
   | ADTValue (c, [], []) when Datatypes.is_true_ctr_name c -> pure ()
-  | _ -> fail0 (sprintf "Contract constraint violation.\n")
+  | _ -> fail0_log (sprintf "Contract constraint violation.\n")
 
 let init_lib_entries env libs =
   let init_lib_entry env id e =
@@ -608,7 +636,7 @@ let init_fields env fs =
     match v with
     | l when is_pure_literal l -> pure (fname, l)
     | _ ->
-        fail0
+        fail0_log
         @@ sprintf "Closure cannot be stored in a field %s."
              (EvalName.as_error_string fname)
   in
@@ -642,7 +670,7 @@ let init_contract clibs elibs cconstraint' cparams' cfields args' init_bal =
                 [%equal: EvalName.t] (get_id ps) (fst a)
                 && [%equal: EvalType.t] pt at
               then pure ()
-              else fail0 "")
+              else fail0_log "")
             cparams ~msg:emsg
         in
         pure mp)
@@ -656,7 +684,7 @@ let init_contract clibs elibs cconstraint' cparams' cfields args' init_bal =
           List.count args ~f:(fun a -> [%equal: EvalName.t] (get_id p) (fst a))
           <> 1
         then
-          fail0
+          fail0_log
             (sprintf "Parameter %s must occur exactly once in input.\n"
                (as_error_string p))
         else pure ())
@@ -694,7 +722,7 @@ let create_cur_state_fields initcstate curcstate =
               let%bind t2 = fromR @@ literal_type li in
               if [%equal: EvalName.t] s t && [%equal: EvalType.t] t1 t2 then
                 pure ()
-              else fail0 "")
+              else fail0_log "")
             initcstate ~msg:emsg
         in
         pure ex)
@@ -707,7 +735,7 @@ let create_cur_state_fields initcstate curcstate =
         if
           List.count curcstate ~f:(fun (e', _) -> [%equal: EvalName.t] e e') > 1
         then
-          fail0
+          fail0_log
             (sprintf "Field %s occurs more than once in input.\n"
                (EvalName.as_error_string e))
         else pure ())
@@ -766,7 +794,7 @@ let get_transition_and_procedures ctr tag =
   in
   let procs, trans_opt = procedure_and_transition_finder [] ctr.ccomps in
   match trans_opt with
-  | None -> fail0 @@ sprintf "No contract transition for tag %s found." tag
+  | None -> fail0_log @@ sprintf "No contract transition for tag %s found." tag
   | Some t ->
       let params = t.comp_params in
       let body = t.comp_body in
@@ -793,7 +821,7 @@ let check_message_entries cparams_o entries =
            String.compare s t)
   in
   if not (valid_entries && uniq_entries && valid_params) then
-    fail0
+    fail0_log
     @@ sprintf
          "Duplicate entries or mismatch b/w message entries:\n\
           %s\n\
@@ -811,7 +839,7 @@ let prepare_for_message contr m =
       in
       let%bind tenv = check_message_entries tparams other in
       pure (tenv, incoming_amount, tprocedures, tbody, tname)
-  | _ -> fail0 @@ sprintf "Not a message literal: %s." (pp_literal m)
+  | _ -> fail0_log @@ sprintf "Not a message literal: %s." (pp_literal m)
 
 (* Subtract the amounts to be transferred *)
 let post_process_msgs cstate outs =
@@ -820,7 +848,7 @@ let post_process_msgs cstate outs =
     mapM outs ~f:(fun l ->
         match l with
         | Msg es -> fromR @@ MessagePayload.get_amount es
-        | _ -> fail0 @@ sprintf "Not a message literal: %s." (pp_literal l))
+        | _ -> fail0_log @@ sprintf "Not a message literal: %s." (pp_literal l))
   in
   let open Uint128 in
   let to_be_transferred =
@@ -828,7 +856,7 @@ let post_process_msgs cstate outs =
   in
   let open ContractState in
   if compare cstate.balance to_be_transferred < 0 then
-    fail0
+    fail0_log
     @@ sprintf
          "The balance is too low (%s) to transfer all the funds in the \
           messages (%s)"
@@ -858,7 +886,7 @@ let handle_message contr cstate bstate m =
         match String.split n ~on:'.' with
         | [ simple_name ] ->
             pure @@ Env.bind e (GlobalName.parse_simple_name simple_name) l
-        | _ -> fail0 @@ sprintf "Illegal field %s in incoming message" n)
+        | _ -> fail0_log @@ sprintf "Illegal field %s in incoming message" n)
   in
   let open Configuration in
   (* Create configuration *)

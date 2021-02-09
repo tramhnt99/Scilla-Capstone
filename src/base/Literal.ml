@@ -136,6 +136,7 @@ module type ScillaLiteral = sig
         ( t,
           scilla_error list,
           uint64 ->
+          String.t Base__List.t ->
           ( (t * (LType.TIdentifier.Name.t * t) list) * uint64,
             scilla_error list * uint64 )
           result )
@@ -146,6 +147,7 @@ module type ScillaLiteral = sig
         ( t,
           scilla_error list,
           uint64 ->
+          String.t Base__List.t ->
           ( (t * (LType.TIdentifier.Name.t * t) list) * uint64,
             scilla_error list * uint64 )
           result )
@@ -359,6 +361,7 @@ module MkLiteral (T : ScillaType) = struct
         ( t,
           scilla_error list,
           uint64 ->
+          String.t Base__List.t ->
           ( (t * (LType.TIdentifier.Name.t * t) list) * uint64,
             scilla_error list * uint64 )
           result )
@@ -369,6 +372,7 @@ module MkLiteral (T : ScillaType) = struct
         ( t,
           scilla_error list,
           uint64 ->
+          String.t Base__List.t ->
           ( (t * (LType.TIdentifier.Name.t * t) list) * uint64,
             scilla_error list * uint64 )
           result )
