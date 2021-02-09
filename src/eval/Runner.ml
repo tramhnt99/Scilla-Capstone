@@ -43,8 +43,8 @@ module RunnerName = RunnerSyntax.SIdentifier.Name
 let check_libs clibs elibs name gas_limit =
   let ls = init_libraries clibs elibs in
   (* Are libraries ok? *)
-  match ls Eval.init_gas_kont gas_limit with
-  | Ok (res, gas_remaining) ->
+  match ls Eval.init_gas_kont gas_limit [] with
+  | Ok (res, gas_remaining, _) ->
       plog
         (sprintf
            "\n\
@@ -57,7 +57,7 @@ let check_libs clibs elibs name gas_limit =
                    EvalUtil.EvalName.as_string (fst x))))
            name);
       gas_remaining
-  | Error (err, gas_remaining) ->
+  | Error (err, gas_remaining, _) ->
       fatal_error_gas_scale Gas.scale_factor err gas_remaining
 
 (****************************************************)

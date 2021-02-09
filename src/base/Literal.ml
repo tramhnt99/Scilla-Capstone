@@ -137,8 +137,8 @@ module type ScillaLiteral = sig
           scilla_error list,
           uint64 ->
           String.t Base__List.t ->
-          ( (t * (LType.TIdentifier.Name.t * t) list) * uint64,
-            scilla_error list * uint64 )
+          ( (t * (LType.TIdentifier.Name.t * t) list) * uint64 * String.t Base__List.t,
+            scilla_error list * uint64 * String.t Base__List.t)
           result )
         CPSMonad.t)
     (* A type abstraction *)
@@ -148,8 +148,8 @@ module type ScillaLiteral = sig
           scilla_error list,
           uint64 ->
           String.t Base__List.t ->
-          ( (t * (LType.TIdentifier.Name.t * t) list) * uint64,
-            scilla_error list * uint64 )
+          ( (t * (LType.TIdentifier.Name.t * t) list) * uint64 * String.t Base__List.t,
+            scilla_error list * uint64 * String.t Base__List.t)
           result )
         CPSMonad.t)
   [@@deriving sexp]
@@ -362,8 +362,8 @@ module MkLiteral (T : ScillaType) = struct
           scilla_error list,
           uint64 ->
           String.t Base__List.t ->
-          ( (t * (LType.TIdentifier.Name.t * t) list) * uint64,
-            scilla_error list * uint64 )
+          ( (t * (LType.TIdentifier.Name.t * t) list) * uint64 * String.t Base__List.t,
+            scilla_error list * uint64 * String.t Base__List.t)
           result )
         CPSMonad.t)
     (* A type abstraction *)
@@ -373,8 +373,8 @@ module MkLiteral (T : ScillaType) = struct
           scilla_error list,
           uint64 ->
           String.t Base__List.t ->
-          ( (t * (LType.TIdentifier.Name.t * t) list) * uint64,
-            scilla_error list * uint64 )
+          ( (t * (LType.TIdentifier.Name.t * t) list) * uint64 * String.t Base__List.t,
+            scilla_error list * uint64 * String.t Base__List.t)
           result )
         CPSMonad.t)
   [@@deriving sexp]

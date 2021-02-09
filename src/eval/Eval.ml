@@ -57,8 +57,8 @@ let monad_logging = ref []
 let pp_result r exclude_names gas_remaining =
   let enames = List.append exclude_names reserved_names in
   match r with
-  | Error (s, _) -> sprint_scilla_error_list s
-  | Ok ((e, env), _) ->
+  | Error (s, _, _) -> sprint_scilla_error_list s
+  | Ok ((e, env), _, _) ->
       let filter_prelude (k, _) =
         not @@ List.mem enames k ~equal:[%equal: EvalName.t]
       in
@@ -179,12 +179,7 @@ Stdint.Uint64.t -> 'c
    type as described in [Specialising the Return Type of Closures].
  *)
 
-let rec exp_eval erep env : (Scilla_eval.EvalUtil.EvalSyntax.SLiteral.t *
-                             (Scilla_eval__EvalUtil.EvalName.t,
-                              Scilla_eval.EvalUtil.EvalSyntax.SLiteral.t)
-                               Core_kernel.List.Assoc.t, Scilla_base.ErrorUtils.scilla_error list,
-                             Stdint.Uint64.t -> 'a Base__List.t -> 'b)
-    Scilla_base__MonadUtil.CPSMonad.t =
+let rec exp_eval erep env =
   let e, loc = erep in
   match e with
   | Literal l -> pure (l, env)
@@ -299,7 +294,7 @@ let rec exp_eval erep env : (Scilla_eval.EvalUtil.EvalSyntax.SLiteral.t *
       let%bind cost = fromR @@ eval_gas_charge env g in
       let emsg = sprintf "Ran out of gas.\n" in
       (* Add end location too: https://github.com/Zilliqa/scilla/issues/134 *)
-      checkwrap_op_log thunk (Uint64.of_int cost) (mk_error1 emsg loc)
+      checkwrap_op thunk (Uint64.of_int cost) (mk_error1 emsg loc)
 
       
 
