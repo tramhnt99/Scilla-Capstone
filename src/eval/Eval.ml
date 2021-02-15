@@ -50,7 +50,6 @@ let reserved_names =
     RecursionPrinciples.recursion_principles
 
 (*Global reference for logging*)
-let logging = ref []
 let monad_logging = ref []
 
 (* Printing result *)
@@ -65,7 +64,7 @@ let pp_result r exclude_names gas_remaining =
       (sprintf "%s,\n%s\nGas remaining: %s" (Env.pp_value e)
         (Env.pp ~f:filter_prelude env)
         (Stdint.Uint64.to_string gas_remaining)) ^ 
-      (String.concat ~sep:"\n" !logging) 
+      (String.concat ~sep:"\n" !monad_logging) 
 
 (* Makes sure that the literal has no closures in it *)
 (* TODO: Augment with deep checking *)
@@ -153,19 +152,8 @@ let builtin_executor env f args_id =
   in
   let%bind cost = fromR @@ builtin_cost env f tps args_id in
   let res () = op arg_lits ret_typ in
-  checkwrap_opR_log res (Uint64.of_int cost) []
+  checkwrap_opR_log res (Uint64.of_int cost) ["builtin_executor"]
 
-(*   
-
-(unit ->
- (('a, 'b) Core_kernel._result -> Stdint.Uint64.t -> 'c) ->
- Stdint.Uint64.t -> 'c) ->
-Stdint.Uint64.t ->
-'b ->
-(('a, 'b) Core_kernel._result -> Stdint.Uint64.t -> 'c) ->
-Stdint.Uint64.t -> 'c
-
-*)
 
 
 (*******************************************************)
@@ -185,7 +173,10 @@ let rec exp_eval erep env =
   | Literal l -> pure (l, env)
   | Var i ->
       let%bind v = fromR @@ Env.lookup env i in
-      pure @@ (v, env)
+      let thunk () = pure v in
+      let emsg = sprintf "Logging of variable failure. \n" in
+      collecting_semantics thunk env emsg loc 
+        (sprintf "Variable: (%s)" (Env.pp_value v))
   | Let (i, _, lhs, rhs) ->
       let%bind lval, _ = exp_eval lhs env in
       let env' = Env.bind env (get_id i) lval in
@@ -265,7 +256,6 @@ let rec exp_eval erep env =
   | Builtin (i, actuals) ->
       let%bind res = builtin_executor env i actuals in
       pure (res, env)
-      (* failwith "to be fixed" *)
   | Fixpoint (g, _, body) ->
       let rec fix arg =
         let env1 = Env.bind env (get_id g) clo_fix in
@@ -296,11 +286,9 @@ let rec exp_eval erep env =
       (* Add end location too: https://github.com/Zilliqa/scilla/issues/134 *)
       checkwrap_op thunk (Uint64.of_int cost) (mk_error1 emsg loc)
 
-      
-
 (* Applying a function *)
 and try_apply_as_closure v arg =
-  let%bind _ = log_app_closure v arg in
+  (* let%bind _ = log_app_closure v arg in *)
   match v with
   | Clo clo -> clo arg
   | _ -> fail0_log @@ sprintf "Not a functional value: %s." (Env.pp_value v)
@@ -310,17 +298,13 @@ and try_apply_as_type_closure v arg_type =
   | TAbs tclo -> tclo arg_type
   | _ -> fail0_log @@ sprintf "Not a type closure: %s." (Env.pp_value v)
 
-and log_app_closure v arg = 
-  match v with
-  | Clo _ -> 
-      begin
-        logging := !logging @ [
-            (sprintf "Closure %s" (Env.pp_value v))
-            ^ (sprintf " applied to argument %s." (Env.pp_value arg))
-          ];
-        pure v
-    end
-  | _ -> fail0_log @@ sprintf "Logging: Not a type closure: %s." (Env.pp_value v)
+(* Collecting concrete semantics, current as Strings *)
+and collecting_semantics thunk env emsg loc log =
+  (*Can include environment but it's too long for printing (147 built in func) 
+  - commented out *)
+  (* let env_string = "with env: %s" (Env.pp env) in *)
+  let%bind res = checkwrap_op_log thunk (Uint64.of_int 0) (mk_error1 emsg loc) [log] in
+  pure (res, env)
 
 (* [Initial Gas-Passing Continuation]
 
@@ -348,10 +332,13 @@ let exp_eval_wrapper_no_cps expr env k gas log =
   let res, remaining_gas, current_log =
     match eval_res with 
       |  Ok (z, g, l) -> 
-          (monad_logging := l;
+          (* Printf.printf "Running exp_eval_wrapper_no_cps \n";
+          List.iter l ~f:(fun x -> print_string x);
+          Printf.printf "\n"; *)
+          (monad_logging := !monad_logging @ l;
           (Ok z, g, l))
       | Error (m, g, l) -> 
-          (monad_logging := l;
+          (monad_logging := !monad_logging @ l;
           (Error m, g, l))
   in
   k res remaining_gas current_log
@@ -480,7 +467,7 @@ let rec stmt_eval conf stmts =
             mk_error1 "Ran out of gas after evaluating statement" sloc
           in
           let remaining_stmts () = stmt_eval conf sts in
-          checkwrap_op_log remaining_stmts (Uint64.of_int cost) err [])
+          checkwrap_op_log remaining_stmts (Uint64.of_int cost) err ["stmt_eval at GasStmt"])
 
 and try_apply_as_procedure conf proc proc_rest actuals =
   (* Create configuration for procedure call *)

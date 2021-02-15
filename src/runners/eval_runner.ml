@@ -91,14 +91,17 @@ let run () =
           let envres = Eval.init_libraries None elibs in
           let env, gas_remaining, current_log =
             match envres Eval.init_gas_kont gas_limit [] with
-            | Ok (env', gas_remaining, current_log) -> (env', gas_remaining, current_log)
+            | Ok (env', gas_remaining, current_log) -> 
+              (env', gas_remaining, current_log)
             | Error (err, gas_remaining, _) -> fatal_error_gas err gas_remaining
           in
           let lib_fnames = List.map ~f:(fun (name, _) -> name) env in
           let res' = Eval.(exp_eval dis_e env init_gas_kont gas_remaining current_log) in
           match res' with
-          | Ok (_, gas_remaining, _) ->
-              printf "%s\n" (Eval.pp_result res' lib_fnames gas_remaining)
+          | Ok (_, gas_remaining, current_log) ->
+              printf "%s\n" (Eval.pp_result res' lib_fnames gas_remaining);
+              printf "And semantics collected after exp_eval are \n";
+              List.iter current_log ~f:(fun x -> print_string (x ^ "\n"));
           | Error (el, gas_remaining, _) -> fatal_error_gas el gas_remaining )
       | Error e -> fatal_error e )
   | Error e -> fatal_error e
