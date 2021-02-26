@@ -27,6 +27,7 @@ open PrettyPrinters
 open Result.Let_syntax
 open ParserUtil
 open MonadUtil
+open SemanticsUtil
 module RG = Gas.ScillaGas (ParserRep) (ParserRep)
 
 (* Stdlib are implicitly imported, so we need to use local names in the parser *)
@@ -72,6 +73,8 @@ let run () =
     if Stdint.Uint64.(compare cli.gas_limit zero = 0) then default_gas_limit
     else cli.gas_limit
   in
+  let print_semantics = cli.p_seman in
+  let seman_file = cli.o_seman in
   match FEParser.parse_expr_from_file filename with
   | Ok e_nogas -> (
       StdlibTracker.add_stdlib_dirs cli.stdlib_dirs;
@@ -100,8 +103,12 @@ let run () =
           match res' with
           | Ok (_, gas_remaining, current_log) ->
               printf "%s\n" (Eval.pp_result res' lib_fnames gas_remaining);
-              printf "And semantics collected after exp_eval are \n";
-              List.iter current_log ~f:(fun x -> print_string (x ^ "\n"));
+              if print_semantics then 
+                (printf "And semantics collected after exp_eval are \n";
+                List.iter current_log ~f:(fun x -> print_string (x ^ "\n")));
+              if not (String.is_empty seman_file) then
+                  Out_channel.with_file seman_file ~f:(fun ch ->
+                  Out_channel.output_string ch (output_seman current_log))
           | Error (el, gas_remaining, _) -> fatal_error_gas el gas_remaining )
       | Error e -> fatal_error e )
   | Error e -> fatal_error e

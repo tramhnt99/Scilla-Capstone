@@ -49,9 +49,6 @@ let reserved_names =
       | LibTyp (tname, _) -> get_id tname)
     RecursionPrinciples.recursion_principles
 
-(*Global reference for logging*)
-let monad_logging = ref []
-
 (* Printing result *)
 let pp_result r exclude_names gas_remaining =
   let enames = List.append exclude_names reserved_names in
@@ -61,10 +58,9 @@ let pp_result r exclude_names gas_remaining =
       let filter_prelude (k, _) =
         not @@ List.mem enames k ~equal:[%equal: EvalName.t]
       in
-      (sprintf "%s,\n%s\nGas remaining: %s" (Env.pp_value e)
+      sprintf "%s,\n%s\nGas remaining: %s" (Env.pp_value e)
         (Env.pp ~f:filter_prelude env)
-        (Stdint.Uint64.to_string gas_remaining)) ^ 
-      (String.concat ~sep:"\n" !monad_logging) 
+        (Stdint.Uint64.to_string gas_remaining)
 
 (* Makes sure that the literal has no closures in it *)
 (* TODO: Augment with deep checking *)
@@ -331,15 +327,10 @@ let exp_eval_wrapper_no_cps expr env k gas log =
   let eval_res = exp_eval expr env init_gas_kont gas log in
   let res, remaining_gas, current_log =
     match eval_res with 
-      |  Ok (z, g, l) -> 
-          (* Printf.printf "Running exp_eval_wrapper_no_cps \n";
-          List.iter l ~f:(fun x -> print_string x);
-          Printf.printf "\n"; *)
-          (monad_logging := !monad_logging @ l;
-          (Ok z, g, l))
-      | Error (m, g, l) -> 
-          (monad_logging := !monad_logging @ l;
-          (Error m, g, l))
+      |  Ok (z, g, l) ->
+          (Ok z, g, l)
+      | Error (m, g, l) ->
+          (Error m, g, l)
   in
   k res remaining_gas current_log
 
