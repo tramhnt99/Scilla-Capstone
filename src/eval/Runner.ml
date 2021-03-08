@@ -43,7 +43,7 @@ module RunnerName = RunnerSyntax.SIdentifier.Name
 let check_libs clibs elibs name gas_limit =
   let ls = init_libraries clibs elibs in
   (* Are libraries ok? *)
-  match ls Eval.init_gas_kont gas_limit [] with
+  match ls Eval.init_gas_kont gas_limit SemanticsUtil.init_log  with
   | Ok (res, gas_remaining, _) ->
       plog
         (sprintf
@@ -64,7 +64,7 @@ let check_libs clibs elibs name gas_limit =
 (*     Checking initialized contract state          *)
 (****************************************************)
 let check_extract_cstate name res gas_limit =
-  match res Eval.init_gas_kont gas_limit [] with
+  match res Eval.init_gas_kont gas_limit SemanticsUtil.init_log with
   | Error (err, remaining_gas, _) ->
       fatal_error_gas_scale Gas.scale_factor err remaining_gas
   | Ok ((_, cstate, field_vals), remaining_gas, _) ->
@@ -76,7 +76,7 @@ let check_extract_cstate name res gas_limit =
 (*****************************************************)
 
 let check_after_step res gas_limit =
-  match res Eval.init_gas_kont gas_limit [] with
+  match res Eval.init_gas_kont gas_limit SemanticsUtil.init_log with
   | Error (err, remaining_gas, _) ->
       fatal_error_gas_scale Gas.scale_factor err remaining_gas
   | Ok ((cstate, outs, events, accepted_b), remaining_gas, _) ->

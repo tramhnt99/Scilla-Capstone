@@ -35,6 +35,7 @@ open EvalIdentifier
 open EvalType
 open EvalLiteral
 open EvalSyntax
+open SemanticsUtil
 module CU = ScillaContractUtil (ParserRep) (ParserRep)
 
 (***************************************************)
@@ -148,7 +149,7 @@ let builtin_executor env f args_id =
   in
   let%bind cost = fromR @@ builtin_cost env f tps args_id in
   let res () = op arg_lits ret_typ in
-  checkwrap_opR_log res (Uint64.of_int cost) ["builtin_executor"]
+  checkwrap_opR res (Uint64.of_int cost)
 
 
 
@@ -169,14 +170,13 @@ let rec exp_eval erep env =
   | Literal l -> pure (l, env)
   | Var i ->
       let%bind v = fromR @@ Env.lookup env i in
-      let thunk () = pure v in
-      let emsg = sprintf "Logging of variable failure. \n" in
-      collecting_semantics thunk env emsg loc 
-        (sprintf "Variable: (%s)" (Env.pp_value v))
+      let thunk () = pure (v, env) in
+      collecting_semantics thunk loc ([], [SemanticsUtil.var_semantics i v])
   | Let (i, _, lhs, rhs) ->
       let%bind lval, _ = exp_eval lhs env in
       let env' = Env.bind env (get_id i) lval in
-      exp_eval rhs env'
+      let thunk () = exp_eval rhs env' in
+      collecting_semantics thunk loc (SemanticsUtil.new_flow (Var i) (fst lhs),[(SemanticsUtil.let_semantics i lhs lval)])
   | Message bs ->
       (* Resolve all message payload *)
       let resolve pld =
@@ -295,12 +295,9 @@ and try_apply_as_type_closure v arg_type =
   | _ -> fail0_log @@ sprintf "Not a type closure: %s." (Env.pp_value v)
 
 (* Collecting concrete semantics, current as Strings *)
-and collecting_semantics thunk env emsg loc log =
-  (*Can include environment but it's too long for printing (147 built in func) 
-  - commented out *)
-  (* let env_string = "with env: %s" (Env.pp env) in *)
-  let%bind res = checkwrap_op_log thunk (Uint64.of_int 0) (mk_error1 emsg loc) [log] in
-  pure (res, env)
+and collecting_semantics thunk loc log =
+  let emsg = sprintf "Logging of variable failure. \n" in
+  checkwrap_op_log thunk (Uint64.of_int 0) (mk_error1 emsg loc) log
 
 (* [Initial Gas-Passing Continuation]
 
@@ -458,7 +455,7 @@ let rec stmt_eval conf stmts =
             mk_error1 "Ran out of gas after evaluating statement" sloc
           in
           let remaining_stmts () = stmt_eval conf sts in
-          checkwrap_op_log remaining_stmts (Uint64.of_int cost) err ["stmt_eval at GasStmt"])
+          checkwrap_op_log remaining_stmts (Uint64.of_int cost) err ([], ["stmt_eval at GasStmt"]))
 
 and try_apply_as_procedure conf proc proc_rest actuals =
   (* Create configuration for procedure call *)

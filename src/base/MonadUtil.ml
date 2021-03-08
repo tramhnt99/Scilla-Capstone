@@ -253,16 +253,21 @@ module EvalMonad = struct
   let fromR_log r =
     match r with Core_kernel.Error s -> fail_log s | Core_kernel.Ok a -> pure a
 
+  let update_log prev newl = 
+    let v1, s1 = prev in
+    let v2, s2 = newl in
+    (v1 @ v2), (s1 @ s2)
+
   let checkwrap_opR_log op_thunk cost log k remaining_gas current_log =
     if Uint64.compare remaining_gas cost >= 0 then
       let res = op_thunk () in
-      k res (Uint64.sub remaining_gas cost) (current_log @ log)
-    else k (Error out_of_gas_err) remaining_gas (current_log @ log)
+      k res (Uint64.sub remaining_gas cost) (update_log current_log log)
+    else k (Error out_of_gas_err) remaining_gas (update_log current_log log)
 
     let checkwrap_op_log op_thunk cost emsg log k remaining_gas current_log =
     if Uint64.compare remaining_gas cost >= 0 then
-      op_thunk () k (Uint64.sub remaining_gas cost) (current_log @ log)
-    else k (Error emsg) remaining_gas (current_log @ log)
+      op_thunk () k (Uint64.sub remaining_gas cost) (update_log current_log log)
+    else k (Error emsg) remaining_gas (update_log current_log log)
 
   open Let_syntax
 

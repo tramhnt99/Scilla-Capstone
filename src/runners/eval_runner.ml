@@ -93,7 +93,7 @@ let run () =
           (* Since this is not a contract, we have no in-contract lib defined. *)
           let envres = Eval.init_libraries None elibs in
           let env, gas_remaining, current_log =
-            match envres Eval.init_gas_kont gas_limit [] with
+            match envres Eval.init_gas_kont gas_limit SemanticsUtil.init_log with
             | Ok (env', gas_remaining, current_log) -> 
               (env', gas_remaining, current_log)
             | Error (err, gas_remaining, _) -> fatal_error_gas err gas_remaining
@@ -105,7 +105,8 @@ let run () =
               printf "%s\n" (Eval.pp_result res' lib_fnames gas_remaining);
               if print_semantics then 
                 (printf "And semantics collected after exp_eval are \n";
-                List.iter current_log ~f:(fun x -> print_string (x ^ "\n")));
+                print_string @@ output_seman current_log);
+                (* List.iter (snd current_log) ~f:(fun x -> print_string (x ^ "\n"))); *)
               if not (String.is_empty seman_file) then
                   Out_channel.with_file seman_file ~f:(fun ch ->
                   Out_channel.output_string ch (output_seman current_log))
