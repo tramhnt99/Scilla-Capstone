@@ -21,10 +21,19 @@ let init_log = ([],[])
 
 (* Finding all variables that have flown into variable x - as a String *)
 (* Problem, we don't have access to monad's result before creating the strings *)
-let rec trace_flow prev_f v acc =
-    match List.find prev_f ~f:(fun x -> fst x = v) with
-    | None -> []
-    | Some (_, v2) -> trace_flow prev_f v2 (v2 :: acc)
+let rec trace_flow (prev_f: (String.t * String.t) list) (v: String.t) acc =
+    match List.find prev_f ~f:(fun x -> String.equal (fst x) v) with
+    | None -> List.rev acc
+    | Some (v1, v2) -> trace_flow prev_f v2 (v2 :: acc)
+
+let flow_to_string (f_l: (String.t * String.t) list) =
+    let s_l = List.map ~f:(fun (x, _) ->
+        let trace = trace_flow f_l x [] in
+        let s = String.concat ~sep:" <- " trace in
+        x ^ " -> " ^ "( " ^ s ^ " )"    
+    ) f_l in 
+    String.concat ~sep:"\n" s_l
+
 
 (* Used in eval_runner to print output *)
 let output_seman log_l =
@@ -33,7 +42,8 @@ let output_seman log_l =
     let filered_flow = List.filteri (fst log_l) ~f:(fun i _ -> i > 103) in
     let flow_l = List.fold_left filered_flow ~init:[] ~f:(fun prev pair -> ("(" ^ fst pair ^ "," ^ snd pair ^ ")") :: prev) in
     let flow = String.concat ~sep:" " (List.rev flow_l) in
-    (String.concat ~sep:"\n" filtered_log) ^ "\n" ^ flow ^ "\n"
+    let edit_flow = flow_to_string filered_flow in
+    (String.concat ~sep:"\n" filtered_log) ^ "\n" ^ flow ^ "\n" ^ edit_flow ^ "\n"
 
 let to_string = SIdentifier.as_string
 

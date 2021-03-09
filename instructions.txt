@@ -1,0 +1,1 @@
+bin/eval-runner -gaslimit 10000 -output-seman semantics/a.json -libdir src/stdlib tests/eval/good/let.scilexp
