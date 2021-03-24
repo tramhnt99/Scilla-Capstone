@@ -211,7 +211,8 @@ let rec exp_eval erep env =
             let%bind v = res in
             try_apply_as_closure v arg)
       in
-      pure (fully_applied, env)
+      let thunk () = pure (fully_applied, env) in
+      collecting_semantics thunk loc ([], [app_semantics f actuals])      
   | Constr (cname, ts, actuals) ->
       let open Datatypes.DataTypeDictionary in
       let%bind _, constr =

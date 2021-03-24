@@ -38,12 +38,15 @@ let flow_to_string (f_l: (String.t * String.t) list) =
 (* Used in eval_runner to print output *)
 let output_seman log_l =
     (*Remove the first 104 lines of Let*)
-    let filtered_log = List.filteri (snd log_l) ~f:(fun i _ -> i > 103) in
+    let filtered_log = List.filteri (snd log_l) ~f:(fun i _ -> i > 209) in
     let filered_flow = List.filteri (fst log_l) ~f:(fun i _ -> i > 103) in
-    let flow_l = List.fold_left filered_flow ~init:[] ~f:(fun prev pair -> ("(" ^ fst pair ^ "," ^ snd pair ^ ")") :: prev) in
-    let flow = String.concat ~sep:" " (List.rev flow_l) in
+    (* let flow_l = List.fold_left filered_flow ~init:[] ~f:(fun prev pair -> ("(" ^ fst pair ^ "," ^ snd pair ^ ")") :: prev) in
+    let flow = String.concat ~sep:" " (List.rev flow_l) in *)
     let edit_flow = flow_to_string filered_flow in
-    (String.concat ~sep:"\n" filtered_log) ^ "\n" ^ flow ^ "\n" ^ edit_flow ^ "\n"
+    "\nLogging sequence: \n" ^
+    (String.concat ~sep:"\n" filtered_log) ^ 
+    (* "\n" ^ flow ^  *)
+    "\n\nFlows: \n" ^ edit_flow ^ "\n"
 
 let to_string = SIdentifier.as_string
 
@@ -55,22 +58,32 @@ let rec no_gas_to_string l =
         | Let (i1, _, i2, _)  -> "Let " ^ to_string i1 ^ " = " ^ (no_gas_to_string @@ fst i2) (*Because we get Gas next*)
         | Message _ -> "Message"
         | Fun (i, _, _) -> "Fun: Var " ^ to_string i
-        | App _ -> "App"
-        | Constr _ -> "Constr"
-        | MatchExpr _ -> "MatchExpr"
+        | App (i, i_l) -> "App " ^ to_string i ^ " --to--> (" ^ (String.concat ~sep:", " (List.map ~f:(fun x -> to_string x) i_l)) ^ " )"   
+        | Constr (i, _, _) -> "Constr " ^ to_string i
+        | MatchExpr (i, _) -> "MatchExpr " ^ to_string i
         | Builtin _ -> "Builtin"
-        | TFun _ -> "TFun"
-        | TApp _ -> "TApp"
+        | TFun (i, _) -> "TFun " ^ to_string i
+        | TApp (i, _) -> "TApp" ^ to_string i
         | Fixpoint _ -> "Fixpoint"
         | GasExpr (_, e) -> no_gas_to_string (fst e)
 
-(*Printing a Let statement*)
-let let_semantics i lhs lval =
-    sprintf "Let: %s <- (%s) = (%s)" (SIdentifier.as_string i) (no_gas_to_string @@ fst lhs) (Env.pp_value lval)
 
-(* Printing Variable statement*)
+(* **********************************************
+
+Printing semantics
+
+************************************************ *)
+(*Printing a Let expr*)
+let let_semantics i lhs lval =
+    sprintf "Let: %s <- (%s) = (%s)" (to_string i) (no_gas_to_string @@ fst lhs) (Env.pp_value lval)
+
+(* Printing Variable expr*)
 let var_semantics i v = 
-    sprintf "Variable: %s -> (%s)" (SIdentifier.as_string i)(Env.pp_value v)
+    sprintf "Variable: %s -> (%s)" (to_string i)(Env.pp_value v)
+
+(* Printing Application expr *)
+let app_semantics i i_l = 
+    sprintf "App: %s ---to---> (%s)" (to_string i) (String.concat ~sep:", " (List.map ~f:(fun x -> to_string x) i_l))
 
 (*Adding a variable that flowed into another*)
 let new_flow v1 v2 =
