@@ -57,7 +57,7 @@ let rec no_gas_to_string l =
         | Var i -> "Variable " ^ SIdentifier.as_string i
         | Let (i1, _, i2, _)  -> "Let " ^ to_string i1 ^ " = " ^ (no_gas_to_string @@ fst i2) (*Because we get Gas next*)
         | Message _ -> "Message"
-        | Fun (i, _, _) -> "Fun: Var " ^ to_string i
+        | Fun (i, _, body) -> "Fun: Var (" ^ to_string i ^ ") Body: " ^ no_gas_to_string (fst body)
         | App (i, i_l) -> "App " ^ to_string i ^ " --to--> (" ^ (String.concat ~sep:", " (List.map ~f:(fun x -> to_string x) i_l)) ^ " )"   
         | Constr (i, _, _) -> "Constr " ^ to_string i
         | MatchExpr (i, _) -> "MatchExpr " ^ to_string i
@@ -85,6 +85,30 @@ let var_semantics i v =
 let app_semantics i i_l = 
     sprintf "App: %s ---to---> (%s)" (to_string i) (String.concat ~sep:", " (List.map ~f:(fun x -> to_string x) i_l))
 
-(*Adding a variable that flowed into another*)
+(* Printing Fun expr *)
+let fun_semantics i body =
+    sprintf "Fun: Var %s: (%s)" (to_string i) (no_gas_to_string body)
+
+(* Printing Message *) 
+let mes_semantics bs = 
+    sprintf "Message: [%s]" @@
+        String.concat ~sep: ", " (List.map bs (fun (x1, x2) -> x1))
+
+let constr_semantics constr =
+    sprintf "Const: %s" (no_gas_to_string constr)
+
+let match_semantics x =
+    sprintf "MatchExpr: %s" (to_string x)
+
+let tfun_semantics tv body =
+    sprintf "TFun: Var %s: (%s)" (to_string tv) (no_gas_to_string body)
+
+let tapp_semantics tf arg_types =
+    sprintf "TApp: %s --to--> (%s)" (to_string tf) (String.concat ~sep:", " (List.map ~f:(fun x -> SType.pp_typ x) arg_types))
+
+
+
+(* Adding a variable that flowed into another *)
 let new_flow v1 v2 =
     [(no_gas_to_string v1, no_gas_to_string v2)]
+

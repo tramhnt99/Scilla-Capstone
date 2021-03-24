@@ -171,12 +171,12 @@ let rec exp_eval erep env =
   | Var i ->
       let%bind v = fromR @@ Env.lookup env i in
       let thunk () = pure (v, env) in
-      collecting_semantics thunk loc ([], [SemanticsUtil.var_semantics i v])
+      collecting_semantics thunk loc ([], var_semantics i v)
   | Let (i, _, lhs, rhs) ->
       let%bind lval, _ = exp_eval lhs env in
       let env' = Env.bind env (get_id i) lval in
       let thunk () = exp_eval rhs env' in
-      collecting_semantics thunk loc (SemanticsUtil.new_flow (Var i) (fst lhs),[(SemanticsUtil.let_semantics i lhs lval)])
+      collecting_semantics thunk loc (new_flow (Var i) (fst lhs),(let_semantics i lhs lval))
   | Message bs ->
       (* Resolve all message payload *)
       let resolve pld =
@@ -191,14 +191,16 @@ let rec exp_eval erep env =
         (* Make sure we resolve all the payload *)
         mapM bs ~f:(fun (s, pld) -> liftPair2 s @@ fromR @@ resolve pld)
       in
-      pure (Msg payload_resolved, env)
+      let thunk () = pure (Msg payload_resolved, env) in
+      collecting_semantics thunk loc ([], mes_semantics bs)
   | Fun (formal, _, body) ->
       (* Apply to an argument *)
       let runner arg =
         let env1 = Env.bind env (get_id formal) arg in
         fstM @@ exp_eval body env1
       in
-      pure (Clo runner, env)
+      let thunk () = pure (Clo runner, env) in 
+      collecting_semantics thunk loc ([], fun_semantics formal (fst body))
   | App (f, actuals) ->
       (* Resolve the actuals *)
       let%bind args =
@@ -212,7 +214,7 @@ let rec exp_eval erep env =
             try_apply_as_closure v arg)
       in
       let thunk () = pure (fully_applied, env) in
-      collecting_semantics thunk loc ([], [app_semantics f actuals])      
+      collecting_semantics thunk loc ([], app_semantics f actuals)      
   | Constr (cname, ts, actuals) ->
       let open Datatypes.DataTypeDictionary in
       let%bind _, constr =
@@ -232,7 +234,8 @@ let rec exp_eval erep env =
         in
         (* Make sure we only pass "pure" literals, not closures *)
         let lit = ADTValue (get_id cname, ts, args) in
-        pure (lit, env)
+        let thunk () = pure (lit, env) in
+        collecting_semantics thunk loc ([], constr_semantics e)
   | MatchExpr (x, clauses) ->
       let%bind v = fromR @@ Env.lookup env x in
       (* Get the branch and the bindings *)
@@ -249,7 +252,8 @@ let rec exp_eval erep env =
         List.fold_left bnds ~init:env ~f:(fun z (i, w) ->
             Env.bind z (get_id i) w)
       in
-      exp_eval e_branch env'
+      let thunk () = exp_eval e_branch env' in
+      collecting_semantics thunk loc ([], match_semantics x)
   | Builtin (i, actuals) ->
       let%bind res = builtin_executor env i actuals in
       pure (res, env)
@@ -267,7 +271,8 @@ let rec exp_eval erep env =
         let body_subst = subst_type_in_expr tv arg_type body in
         fstM @@ exp_eval body_subst env
       in
-      pure (TAbs typer, env)
+      let thunk () = pure (TAbs typer, env) in
+      collecting_semantics thunk loc ([], tfun_semantics tv @@ fst body)
   | TApp (tf, arg_types) ->
       let%bind ff = fromR @@ Env.lookup env tf in
       let%bind fully_applied =
@@ -275,7 +280,8 @@ let rec exp_eval erep env =
             let%bind v = res in
             try_apply_as_type_closure v arg_type)
       in
-      pure (fully_applied, env)
+      let thunk () = pure (fully_applied, env) in
+      collecting_semantics thunk loc ([], tapp_semantics tf arg_types)
   | GasExpr (g, e') ->
       let thunk () = exp_eval e' env in
       let%bind cost = fromR @@ eval_gas_charge env g in
@@ -297,8 +303,13 @@ and try_apply_as_type_closure v arg_type =
 
 (* Collecting concrete semantics, current as Strings *)
 and collecting_semantics thunk loc log =
+  (* remove builtins *)
+  let loc_log =
+    if String.equal (String.sub ~pos:0 ~len:10 (get_loc_str loc)) "src/stdlib" then ""
+    else (get_loc_str loc) ^ " " ^ (snd log) 
+  in
   let emsg = sprintf "Logging of variable failure. \n" in
-  checkwrap_op_log thunk (Uint64.of_int 0) (mk_error1 emsg loc) log
+  checkwrap_op_log thunk (Uint64.of_int 0) (mk_error1 emsg loc) (fst log, [loc_log])
 
 (* [Initial Gas-Passing Continuation]
 
