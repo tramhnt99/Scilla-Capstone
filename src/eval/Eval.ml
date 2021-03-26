@@ -164,10 +164,20 @@ let builtin_executor env f args_id =
    type as described in [Specialising the Return Type of Closures].
  *)
 
+  open TypeChecker
+  open TypeUtil
+
 let rec exp_eval erep env =
   let e, loc = erep in
+
+
+  let tenv = TEnv.mk () in
+  let typed_expr = TypeChecker.type_expr l tenv TypeChecker.init_gas_kont (Uint64.of_int 0) in
+
+
+
   match e with
-  | Literal l -> pure (l, env)
+  | Literal l -> collecting_semantics (fun () -> pure (l, env)) loc ([], no_gas_to_string e)
   | Var i ->
       let%bind v = fromR @@ Env.lookup env i in
       let thunk () = pure (v, env) in
@@ -305,7 +315,9 @@ and try_apply_as_type_closure v arg_type =
 and collecting_semantics thunk loc log =
   (* remove builtins *)
   let loc_log =
-    if String.equal (String.sub ~pos:0 ~len:10 (get_loc_str loc)) "src/stdlib" then ""
+    if String.equal (String.sub ~pos:0 ~len:10 (get_loc_str loc)) "src/stdlib" 
+        || String.equal (String.sub ~pos:0 ~len:7 (get_loc_str loc)) "Prelude" 
+    then ""
     else (get_loc_str loc) ^ " " ^ (snd log) 
   in
   let emsg = sprintf "Logging of variable failure. \n" in

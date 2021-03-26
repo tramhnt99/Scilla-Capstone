@@ -101,11 +101,11 @@ let run () =
           let lib_fnames = List.map ~f:(fun (name, _) -> name) env in
           let res' = Eval.(exp_eval dis_e env init_gas_kont gas_remaining current_log) in
           match res' with
-          | Ok (_, gas_remaining, current_log) ->
+          | Ok ((_, env), gas_remaining, current_log) ->
               printf "%s\n" (Eval.pp_result res' lib_fnames gas_remaining);
               if print_semantics then 
                 (printf "And semantics collected after exp_eval are \n";
-                print_string @@ output_seman current_log);
+                print_string @@ output_seman current_log env);
                 (* List.iter (snd current_log) ~f:(fun x -> print_string (x ^ "\n"))); *)
               if not (String.is_empty seman_file) then
                   Out_channel.with_file seman_file ~f:(fun ch ->

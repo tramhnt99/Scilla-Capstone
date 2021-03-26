@@ -15,6 +15,7 @@ open EvalType
 open EvalLiteral
 open EvalSyntax
 open SemanticsUtil
+open TypeChecker
 module CU = ScillaContractUtil (ParserRep) (ParserRep)
 
 let init_log = ([],[])
@@ -25,7 +26,8 @@ let rec trace_flow (prev_f: (String.t * String.t) list) (v: String.t) acc =
     match List.find prev_f ~f:(fun x -> String.equal (fst x) v) with
     | None -> List.rev acc
     | Some (v1, v2) -> trace_flow prev_f v2 (v2 :: acc)
-
+    
+(*Product flows to string *)
 let flow_to_string (f_l: (String.t * String.t) list) =
     let s_l = List.map ~f:(fun (x, _) ->
         let trace = trace_flow f_l x [] in
@@ -36,12 +38,13 @@ let flow_to_string (f_l: (String.t * String.t) list) =
 
 
 (* Used in eval_runner to print output *)
-let output_seman log_l =
-    (*Remove the first 104 lines of Let*)
-    let filtered_log = List.filteri (snd log_l) ~f:(fun i _ -> i > 209) in
+let output_seman log_l (env: (Scilla_eval__EvalUtil.EvalName.t,
+                                Scilla_eval.EvalUtil.EvalSyntax.SLiteral.t)
+                                Core_kernel.List.Assoc.t)
+    =
+    (* let filtered_log = List.filteri (snd log_l) ~f:(fun i _ -> i > 209) in *)
     let filered_flow = List.filteri (fst log_l) ~f:(fun i _ -> i > 103) in
-    (* let flow_l = List.fold_left filered_flow ~init:[] ~f:(fun prev pair -> ("(" ^ fst pair ^ "," ^ snd pair ^ ")") :: prev) in
-    let flow = String.concat ~sep:" " (List.rev flow_l) in *)
+    let filtered_log = List.filter (snd log_l) ~f:(fun s -> not (String.equal s "")) in 
     let edit_flow = flow_to_string filered_flow in
     "\nLogging sequence: \n" ^
     (String.concat ~sep:"\n" filtered_log) ^ 
@@ -50,8 +53,13 @@ let output_seman log_l =
 
 let to_string = SIdentifier.as_string
 
+(* open TypeChecker
+open TypeUtil *)
+
 (* Makes all Literals into strings other than GasExpr *)
 let rec no_gas_to_string l =
+    (* let tenv = TEnv.mk () in
+    let typed_expr = TypeChecker.type_expr l tenv TypeChecker.init_gas_kont (Uint64.of_int 0) in *)
     match l with 
         | Literal l -> "Lit " ^ (Env.pp_value l)
         | Var i -> "Variable " ^ SIdentifier.as_string i
