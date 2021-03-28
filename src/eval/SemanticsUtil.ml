@@ -21,10 +21,10 @@ module CU = ScillaContractUtil (ParserRep) (ParserRep)
 let init_log = ([],[])
 
 (* Finding all variables that have flown into variable x with x's respective type *)
-let rec trace_flow (prev_f: ((String.t * SType.t option) * (String.t * SType.t option)) list) (v: String.t) acc =
+(* let rec trace_flow (prev_f: ((String.t * SType.t option) * (String.t * SType.t option)) list) (v: String.t) acc =
     match List.find prev_f ~f:(fun x -> String.equal (fst @@ fst x) v) with
     | None -> List.rev acc
-    | Some (v1, v2) -> trace_flow prev_f (fst v2) (v2 :: acc)
+    | Some (v1, v2) -> trace_flow prev_f (fst v2) (v2 :: acc) *)
 
 (* Option type to string *)
 let opt_ty_to_string (ty:SType.t option) = 
@@ -43,7 +43,6 @@ let build_type_dict (f_l:  ((String.t * SType.t option) * (String.t * SType.t op
     let dict: (String.t, SType.t) Hashtbl.t = Hashtbl.create (module String) in
     (*Infer types - goes by finding where v1 was used next *)
     let rec infer_types prev_f v =
-        print_string @@ sprintf "Looking for %s \n" v;
         match List.find prev_f ~f:(fun x -> String.equal (fst @@ fst x) v) with
         | None -> ()
         | Some (v1, v2) -> 
@@ -70,11 +69,9 @@ let build_type_dict (f_l:  ((String.t * SType.t option) * (String.t * SType.t op
         match List.find prev_f ~f:(fun x -> String.equal (fst @@ fst x) v) with
         | None -> List.rev acc 
         | Some (v1, v2) -> 
-            let new_fl = if Option.is_none (Hashtbl.find dict (fst v2))
-                        then snd v2 
-                        else Hashtbl.find dict (fst v2)
-            in
-            trace_flow prev_f (fst v2) ((fst v2, new_fl)::acc)
+            if Option.is_some @@ snd v2 then List.rev ((fst v2, snd v2)::acc)
+            else
+            trace_flow prev_f (fst v2) ((fst v2, Hashtbl.find dict (fst v2))::acc)
     in 
     let s_l = List.map f_l ~f:(fun ((x, ty), _) -> 
         let trace = trace_flow f_l x [] in
@@ -83,17 +80,24 @@ let build_type_dict (f_l:  ((String.t * SType.t option) * (String.t * SType.t op
     )
     in
     let dict_l = List.map (Hashtbl.to_alist dict) ~f:(fun (x, y) -> sprintf "(%s: %s)" x (SType.pp_typ y)) in 
-    String.concat ~sep:"\n" s_l, String.concat ~sep:" ;" dict_l
+    String.concat ~sep:"\n" 
+        (List.filter s_l ~f:(fun s -> not @@ String.equal s "Variable t: ___ -> ((TAppIntUtils.int_neq: ___))")), 
+    String.concat ~sep:" ;" dict_l
 
 
 (* Used in eval_runner to print output *)
 let output_seman log_l =
     (* let filtered_log = List.filteri (snd log_l) ~f:(fun i _ -> i > 209) in *)
-    let filered_flow = List.filteri (fst log_l) ~f:(fun i _ -> i > 103) in
+    let filtered_flow = List.filteri (fst log_l) ~f:(fun i _ -> i > 103) in
     let filtered_log = List.filter (snd log_l) ~f:(fun s -> not (String.equal s "")) in 
-    let flow, dict = build_type_dict filered_flow in
+    let flow, dict = build_type_dict filtered_flow in
+    let pre_edit = List.map filtered_flow ~f:(fun ((x1, y1),(x2, y2)) -> 
+        sprintf "(%s, %s),(%s, %s)" x1 (opt_ty_to_string y1) x2 (opt_ty_to_string y2)) 
+            |> String.concat ~sep:"\n"
+    in
     "\nLogging sequence: \n" ^
     (String.concat ~sep:"\n" filtered_log) ^ 
+    (* "\n\nPre-Edited Flow: \n" ^ pre_edit ^ *)
     "\n\nFlows: \n" ^ flow ^ "\n" ^
     "\n\nDict: \n" ^ dict ^ "\n" 
 
@@ -111,7 +115,7 @@ let rec no_gas_to_string l =
         | Var i -> "Variable " ^ SIdentifier.as_string i
         | Let (i1, _, i2, _)  -> "Let " ^ to_string i1 ^ " = " ^ (no_gas_to_string @@ fst i2) (*Because we get Gas next*)
         | Message _ -> "Message"
-        | Fun (i, ty, body) -> sprintf "Fun (Var %s: %s): Body: %s " (to_string i) (SType.pp_typ ty) (no_gas_to_string (fst body))
+        | Fun (i, ty, _) -> sprintf "Fun (Var %s: %s)" (to_string i) (SType.pp_typ ty)
         | App (i, i_l) -> "App " ^ to_string i ^ " --to--> (" ^ (String.concat ~sep:", " (List.map ~f:(fun x -> to_string x) i_l)) ^ " )"   
         | Constr (i, _, _) -> "Constr " ^ to_string i
         | MatchExpr (i, _) -> "MatchExpr " ^ to_string i
@@ -136,12 +140,13 @@ let var_semantics i v =
     sprintf "Variable: %s -> (%s)" (to_string i)(Env.pp_value v)
 
 (* Printing Application expr *)
-let app_semantics i i_l = 
-    sprintf "App: %s ---to---> (%s)" (to_string i) (String.concat ~sep:", " (List.map ~f:(fun x -> to_string x) i_l))
+let app_semantics i i_l lit = 
+    sprintf "App: %s -to-> (%s) = %s" (to_string i) 
+        (String.concat ~sep:", " (List.map ~f:(fun x -> to_string x) i_l)) (no_gas_to_string lit)
 
 (* Printing Fun expr *)
 let fun_semantics i ty body =
-    sprintf "Fun: Var %s: %s : (%s)" (to_string i) (SType.pp_typ ty) (no_gas_to_string body)
+    sprintf "Fun: Var %s: %s" (to_string i) (SType.pp_typ ty)
 
 (* Printing Message *) 
 let mes_semantics bs = 
@@ -182,16 +187,20 @@ let un_gas v =
     | _ -> v
 
 (* Adding v2 flowed into v1. If v2 is a Literal expr, then record its type too*)
-let new_flow v1 v2 (ty: SType.t option): ((String.t * LType.t option) * (String.t * LType.t option)) List.t =
+let new_flow v1 v2 (ty: SType.t option): ((String.t * LType.t option) * (String.t * LType.t option)) =
     let v1' = (no_gas_to_string v1, ty) in
     match un_gas v2 with
     | Literal l -> 
         begin
         match literal_type l with
-        | Ok ty' -> [(v1', (no_gas_to_string v2, Some ty'))]
+        | Ok ty' -> (v1', (no_gas_to_string v2, Some ty'))
         | Error _ -> failwith ""
         end
-    | Fun (i, ty, body) -> 
-        [(v1', (no_gas_to_string v2, Some ty))]
-    | _ -> [(v1', (no_gas_to_string v2, None))]
+    | Fun (i, typ, body) -> 
+        (v1', (no_gas_to_string v2, Some typ))
+    | _ -> (v1', (no_gas_to_string v2, None))
+
+(*Multiple new_flow*)
+let new_flows v1 v2_l ty : ((String.t * LType.t option) * (String.t * LType.t option)) List.t =
+    List.map v2_l ~f:(fun v2 -> new_flow v1 v2 ty)
 

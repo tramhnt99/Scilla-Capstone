@@ -2,20 +2,27 @@
 Logging sequence: 
 Lit (Int32 42)
 Let: x <- (Lit (Int32 42)) = ((Int32 42))
-Fun: Var z: Int : (Variable x)
-Let: f <- (Fun (Var z: Int): Body: Variable x ) = (<closure>)
+Fun: Var z: Int32 : (Let b = Variable x)
+Let: f <- (Fun (Var z: Int32): Body: Let b = Variable x ) = (<closure>)
+Lit (Int32 1)
+Let: a <- (Lit (Int32 1)) = ((Int32 1))
+Lit (Int32 2)
+Let: d <- (Lit (Int32 2)) = ((Int32 2))
 Variable: x -> ((Int32 42))
-Let: y <- (Variable x) = ((Int32 42))
-Variable: y -> ((Int32 42))
-Let: a <- (Variable y) = ((Int32 42))
-Variable: a -> ((Int32 42))
+Let: b <- (Variable x) = ((Int32 42))
+Fun: Var c: Int32 : (Variable z)
+Variable: z -> ((Int32 1))
+App: f -to-> (a, d) = Lit (Int32 1)
 
 Flows: 
 Variable x: Int32 -> ((Lit (Int32 42): Int32))
-Variable f: Int -> ((Fun (Var z: Int): Body: Variable x : Int))
-Variable y: Int32 -> ((Variable x: Int32) <- (Lit (Int32 42): Int32))
-Variable a: Int32 -> ((Variable y: Int32) <- (Variable x: Int32) <- (Lit (Int32 42): Int32))
+Variable f: Int32 -> ((Fun (Var z: Int32): Body: Let b = Variable x : Int32))
+Variable a: Int32 -> ((Lit (Int32 1): Int32))
+Variable d: Int32 -> ((Lit (Int32 2): Int32))
+Variable b: Int32 -> ((Variable x: Int32) <- (Lit (Int32 42): Int32))
+Variable f: Int32 -> ((Fun (Var z: Int32): Body: Let b = Variable x : Int32))
+Variable f: Int32 -> ((Fun (Var z: Int32): Body: Let b = Variable x : Int32))
 
 
 Dict: 
-(Variable y: Int32) ;(Variable f: Int) ;(Variable x: Int32) ;(Variable a: Int32)
+(Variable f: Int32) ;(Variable d: Int32) ;(Variable b: Int32) ;(Variable x: Int32) ;(Variable a: Int32)

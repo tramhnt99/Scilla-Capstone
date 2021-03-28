@@ -176,13 +176,7 @@ let rec exp_eval erep env =
       let%bind lval, _ = exp_eval lhs env in
       let env' = Env.bind env (get_id i) lval in
       let thunk () = exp_eval rhs env' in
-      (* (match (fst lhs) with
-      | Literal _ -> print_string "\n fst lhs is literal";
-      | Var _ -> print_string "\n fst lhs is var";
-      | GasExpr _ -> print_string "\n fst lhs is GAS!!";
-      | _ -> print_string "\n fst lhs is something else";
-      ); *)
-      collecting_semantics thunk loc (new_flow (Var i) (fst lhs) ty,(let_semantics i lhs lval))
+      collecting_semantics thunk loc ([new_flow (Var i) (fst lhs) ty],(let_semantics i lhs lval))
   | Message bs ->
       (* Resolve all message payload *)
       let resolve pld =
@@ -220,7 +214,8 @@ let rec exp_eval erep env =
             try_apply_as_closure v arg)
       in
       let thunk () = pure (fully_applied, env) in
-      collecting_semantics thunk loc ([], app_semantics f actuals)      
+      let actuals_var = List.map actuals ~f:(fun act -> Var act) in
+      collecting_semantics thunk loc (new_flows (Var f) actuals_var None, app_semantics f actuals (Literal fully_applied))      
   | Constr (cname, ts, actuals) ->
       let open Datatypes.DataTypeDictionary in
       let%bind _, constr =
