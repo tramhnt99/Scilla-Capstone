@@ -117,7 +117,7 @@ module type ScillaLiteral = sig
   (* module ER: Syntax.Rep
   type log = (ER.rep LType.TIdentifier.t * ER.rep LType.TIdentifier.t) List.t * String.t List.t *)
   (* type log = ((LType.TIdentifier.Name.t * LType.TIdentifier.Name.t) List.t * String.t List.t) *)
-  type log = ((String.t * String.t) List.t * String.t List.t)
+  type log = (((String.t * LType.t option) * (String.t * LType.t option)) List.t * String.t List.t)
   
 
   type t =
@@ -347,7 +347,7 @@ module MkLiteral (T : ScillaType) = struct
   end
 
   (* type log = ((LType.TIdentifier.Name.t * LType.TIdentifier.Name.t) List.t * String.t List.t) *)
-  type log = ((String.t * String.t) List.t * String.t List.t)
+  type log = (((String.t * LType.t option) * (String.t * LType.t option)) List.t * String.t List.t)
 
   type t =
     | StringLit of string

@@ -21,27 +21,33 @@ module CU = ScillaContractUtil (ParserRep) (ParserRep)
 let init_log = ([],[])
 
 (* Finding all variables that have flown into variable x - as a String *)
-(* Problem, we don't have access to monad's result before creating the strings *)
-let rec trace_flow (prev_f: (String.t * String.t) list) (v: String.t) acc =
-    match List.find prev_f ~f:(fun x -> String.equal (fst x) v) with
+let rec trace_flow (prev_f: ((String.t * SType.t option) * (String.t * SType.t option)) list) (v: String.t) acc =
+    match List.find prev_f ~f:(fun x -> String.equal (fst @@ fst x) v) with
     | None -> List.rev acc
-    | Some (v1, v2) -> trace_flow prev_f v2 (v2 :: acc)
+    | Some (v1, v2) -> trace_flow prev_f (fst v2) (v2 :: acc)
+
+(*Update: handles type *)
+(* let trace_flow (prev_f: ((String.t * SType.t option) * String.t) list) (v: String.t) =
+    let ty_dict = ref [] in
+    let rec step_flow (prev_f: ((String.t * SType.t option) * String.t) list) (v: String.t) acc =
+        match List.find prev_f ~f:(fun x -> String.equal (fst @@ fst x) v) with
+        | None -> List.rev acc
+        | Some (v1, v2) -> trace_flow prev_f v2 (v2 :: acc) *)
     
 (*Product flows to string *)
-let flow_to_string (f_l: (String.t * String.t) list) =
-    let s_l = List.map ~f:(fun (x, _) ->
+let flow_to_string (f_l: ((String.t * SType.t option) * (String.t * SType.t option)) list) =
+    let s_l = List.map ~f:(fun ((x, ty), _) ->
         let trace = trace_flow f_l x [] in
-        let s = String.concat ~sep:" <- " trace in
-        x ^ " -> " ^ "( " ^ s ^ " )"    
+        (*TODO: FIX THIS TO INCLUDE PRINTING OUT TYPES *)
+        let s = String.concat ~sep:" <- " (List.map trace ~f:(fun (x,y) -> x)) in
+        let tys = if Option.is_empty ty then "__" else SType.pp_typ @@ Option.value_exn ty in
+        sprintf "%s: %s -> (%s)" x tys s
     ) f_l in 
     String.concat ~sep:"\n" s_l
 
 
 (* Used in eval_runner to print output *)
-let output_seman log_l (env: (Scilla_eval__EvalUtil.EvalName.t,
-                                Scilla_eval.EvalUtil.EvalSyntax.SLiteral.t)
-                                Core_kernel.List.Assoc.t)
-    =
+let output_seman log_l =
     (* let filtered_log = List.filteri (snd log_l) ~f:(fun i _ -> i > 209) in *)
     let filered_flow = List.filteri (fst log_l) ~f:(fun i _ -> i > 103) in
     let filtered_log = List.filter (snd log_l) ~f:(fun s -> not (String.equal s "")) in 
@@ -65,7 +71,7 @@ let rec no_gas_to_string l =
         | Var i -> "Variable " ^ SIdentifier.as_string i
         | Let (i1, _, i2, _)  -> "Let " ^ to_string i1 ^ " = " ^ (no_gas_to_string @@ fst i2) (*Because we get Gas next*)
         | Message _ -> "Message"
-        | Fun (i, _, body) -> "Fun: Var (" ^ to_string i ^ ") Body: " ^ no_gas_to_string (fst body)
+        | Fun (i, ty, body) -> sprintf "Fun (Var %s: %s): Body: %s " (to_string i) (SType.pp_typ ty) (no_gas_to_string (fst body))
         | App (i, i_l) -> "App " ^ to_string i ^ " --to--> (" ^ (String.concat ~sep:", " (List.map ~f:(fun x -> to_string x) i_l)) ^ " )"   
         | Constr (i, _, _) -> "Constr " ^ to_string i
         | MatchExpr (i, _) -> "MatchExpr " ^ to_string i
@@ -94,8 +100,8 @@ let app_semantics i i_l =
     sprintf "App: %s ---to---> (%s)" (to_string i) (String.concat ~sep:", " (List.map ~f:(fun x -> to_string x) i_l))
 
 (* Printing Fun expr *)
-let fun_semantics i body =
-    sprintf "Fun: Var %s: (%s)" (to_string i) (no_gas_to_string body)
+let fun_semantics i ty body =
+    sprintf "Fun: Var %s: %s : (%s)" (to_string i) (SType.pp_typ ty) (no_gas_to_string body)
 
 (* Printing Message *) 
 let mes_semantics bs = 
@@ -114,9 +120,18 @@ let tfun_semantics tv body =
 let tapp_semantics tf arg_types =
     sprintf "TApp: %s --to--> (%s)" (to_string tf) (String.concat ~sep:", " (List.map ~f:(fun x -> SType.pp_typ x) arg_types))
 
+module TC = TypeChecker.ScillaTypechecker (ParserRep) (ParserRep)
+open TC.TypeEnv.TEnv
 
-
-(* Adding a variable that flowed into another *)
-let new_flow v1 v2 =
-    [(no_gas_to_string v1, no_gas_to_string v2)]
+(* Adding v2 flowed into v1. If v2 is a Literal expr, then record its type too*)
+let new_flow v1 v2 (ty: SType.t option): ((String.t * LType.t option) * (String.t * LType.t option)) List.t =
+    let v1' = (no_gas_to_string v1, ty) in
+    match v2 with
+    | Literal l -> 
+        begin
+        match literal_type l with
+        | Ok ty' -> [(v1', (no_gas_to_string v2, Some ty'))]
+        | Error _ -> failwith ""
+        end
+    | _ -> [(v1', (no_gas_to_string v2, None))]
 
