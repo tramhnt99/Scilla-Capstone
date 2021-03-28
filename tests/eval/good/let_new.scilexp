@@ -1,0 +1,6 @@
+let x = Int32 42 in
+let f = fun (z : Int) => x in
+let y = x in
+let a = y in
+let a = Int32 3 in
+a

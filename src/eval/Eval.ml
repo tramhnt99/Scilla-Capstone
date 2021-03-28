@@ -164,15 +164,8 @@ let builtin_executor env f args_id =
    type as described in [Specialising the Return Type of Closures].
  *)
 
-(* module TC = TypeChecker.ScillaTypechecker (ParserRep) (ParserRep) *)
-
 let rec exp_eval erep env =
   let e, loc = erep in
-
-(* 
-  let tenv = TC.TypeEnv.TEnv.mk () in
-  let typed_expr = TC.type_expr e tenv TC.init_gas_kont (Uint64.of_int 0) in *)
-  
   match e with
   | Literal l -> collecting_semantics (fun () -> pure (l, env)) loc ([], no_gas_to_string e)
   | Var i ->
@@ -183,6 +176,12 @@ let rec exp_eval erep env =
       let%bind lval, _ = exp_eval lhs env in
       let env' = Env.bind env (get_id i) lval in
       let thunk () = exp_eval rhs env' in
+      (* (match (fst lhs) with
+      | Literal _ -> print_string "\n fst lhs is literal";
+      | Var _ -> print_string "\n fst lhs is var";
+      | GasExpr _ -> print_string "\n fst lhs is GAS!!";
+      | _ -> print_string "\n fst lhs is something else";
+      ); *)
       collecting_semantics thunk loc (new_flow (Var i) (fst lhs) ty,(let_semantics i lhs lval))
   | Message bs ->
       (* Resolve all message payload *)
@@ -315,7 +314,9 @@ and collecting_semantics thunk loc log =
     if String.equal (String.sub ~pos:0 ~len:10 (get_loc_str loc)) "src/stdlib" 
         || String.equal (String.sub ~pos:0 ~len:7 (get_loc_str loc)) "Prelude" 
     then ""
-    else (get_loc_str loc) ^ " " ^ (snd log) 
+    else 
+    (* (get_loc_str loc) ^ " " ^  *)
+    (snd log) 
   in
   let emsg = sprintf "Logging of variable failure. \n" in
   checkwrap_op_log thunk (Uint64.of_int 0) (mk_error1 emsg loc) (fst log, [loc_log])

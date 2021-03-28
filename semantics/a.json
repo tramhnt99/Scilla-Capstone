@@ -11,7 +11,11 @@ Let: a <- (Variable y) = ((Int32 42))
 Variable: a -> ((Int32 42))
 
 Flows: 
-Variable x: __ -> (Lit (Int32 42))
-Variable f: __ -> (Fun (Var z: Int): Body: Variable x )
-Variable y: __ -> (Variable x <- Lit (Int32 42))
-Variable a: __ -> (Variable y <- Variable x <- Lit (Int32 42))
+Variable x: Int32 -> ((Lit (Int32 42): Int32))
+Variable f: Int -> ((Fun (Var z: Int): Body: Variable x : Int))
+Variable y: Int32 -> ((Variable x: Int32) <- (Lit (Int32 42): Int32))
+Variable a: Int32 -> ((Variable y: Int32) <- (Variable x: Int32) <- (Lit (Int32 42): Int32))
+
+
+Dict: 
+(Variable y: Int32) ;(Variable f: Int) ;(Variable x: Int32) ;(Variable a: Int32)
