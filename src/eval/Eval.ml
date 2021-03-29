@@ -197,25 +197,42 @@ let rec exp_eval erep env =
       (* Apply to an argument *)
       let runner arg =
         let env1 = Env.bind env (get_id formal) arg in
-        fstM @@ exp_eval body env1
+        let thunk2 () = exp_eval body env1 in
+        fstM @@ collecting_semantics thunk2 loc 
+          ([new_flow (Var formal) (Literal arg) (Some ty)], closure_seman (Var formal) (Literal arg) (Some ty))
       in
       let thunk () = pure (Clo runner, env) in 
       collecting_semantics thunk loc ([], fun_semantics formal ty (fst body))
   | App (f, actuals) ->
-      (* Resolve the actuals *)
-      let%bind args =
-        mapM actuals ~f:(fun arg -> fromR @@ Env.lookup env arg)
+      (*Record that App is being evaluated before evaluating the rest*)
+      let thunk () =
+        (* Resolve the actuals *)
+        (* let%bind args =
+          mapM actuals ~f:(fun arg -> fromR @@ Env.lookup env arg)
+        in
+        let%bind ff = fromR @@ Env.lookup env f in
+        (* Apply iteratively, also evaluating curried lambdas *)
+        let%bind fully_applied =
+          List.fold_left args ~init:(pure ff) ~f:(fun res arg ->
+              let%bind v = res in
+              try_apply_as_closure v arg)
+        in *)
+        let%bind ff = fromR @@ Env.lookup env f in
+        let%bind fully_applied =
+          List.fold_left actuals ~init:(pure ff) ~f:(fun res actual ->
+              let%bind arg = fromR @@ Env.lookup env actual in
+              let%bind v = res in
+              let thunk3 () = liftPair1 (try_apply_as_closure v arg) env in
+              fstM @@ 
+              collecting_semantics thunk3 loc ([new_flow (Literal v) (Var actual) None], 
+                closure_act (Literal v) (Var actual) (Literal arg))
+          )
+        in
+        let thunk2 () = pure (fully_applied, env) in
+        collecting_semantics thunk2 loc ([], app_semantics_post f actuals (Literal fully_applied))
       in
-      let%bind ff = fromR @@ Env.lookup env f in
-      (* Apply iteratively, also evaluating curried lambdas *)
-      let%bind fully_applied =
-        List.fold_left args ~init:(pure ff) ~f:(fun res arg ->
-            let%bind v = res in
-            try_apply_as_closure v arg)
-      in
-      let thunk () = pure (fully_applied, env) in
       let actuals_var = List.map actuals ~f:(fun act -> Var act) in
-      collecting_semantics thunk loc (new_flows (Var f) actuals_var None, app_semantics f actuals (Literal fully_applied))      
+      collecting_semantics thunk loc (new_flows (Var f) actuals_var None, app_semantics_pre f actuals)
   | Constr (cname, ts, actuals) ->
       let open Datatypes.DataTypeDictionary in
       let%bind _, constr =
@@ -292,7 +309,6 @@ let rec exp_eval erep env =
 
 (* Applying a function *)
 and try_apply_as_closure v arg =
-  (* let%bind _ = log_app_closure v arg in *)
   match v with
   | Clo clo -> clo arg
   | _ -> fail0_log @@ sprintf "Not a functional value: %s." (Env.pp_value v)

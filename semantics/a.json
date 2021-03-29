@@ -1,28 +1,46 @@
 
 Logging sequence: 
-Lit (Int32 42)
-Let: x <- (Lit (Int32 42)) = ((Int32 42))
-Fun: Var z: Int32 : (Let b = Variable x)
-Let: f <- (Fun (Var z: Int32): Body: Let b = Variable x ) = (<closure>)
-Lit (Int32 1)
-Let: a <- (Lit (Int32 1)) = ((Int32 1))
-Lit (Int32 2)
-Let: d <- (Lit (Int32 2)) = ((Int32 2))
-Variable: x -> ((Int32 42))
-Let: b <- (Variable x) = ((Int32 42))
-Fun: Var c: Int32 : (Variable z)
-Variable: z -> ((Int32 1))
-App: f -to-> (a, d) = Lit (Int32 1)
+Lit (Int64 42)
+Let: x <- (Lit (Int64 42)) = ((Int64 42))
+Fun: Var z: Int64
+Let: f <- (Fun (Var z: Int64)) = (<closure>)
+Lit (Int64 1)
+Let: a <- (Lit (Int64 1)) = ((Int64 1))
+Lit (String "abc")
+Let: d <- (Lit (String "abc")) = ((String "abc"))
+App-Pre: f -to-> (a, d)
+Closure Lit <closure> <- Var Variable a = Lit Lit (Int64 1)
+Closure App: Var Variable z: Int64 <- (Lit (Int64 1))
+Variable: x -> ((Int64 42))
+Let: b <- (Variable x) = ((Int64 42))
+Fun: Var c: Int64
+Closure Lit <closure> <- Var Variable d = Lit Lit (String "abc")
+Closure App: Var Variable c: Int64 <- (Lit (String "abc"))
+Variable: b -> ((Int64 42))
+App-Post: f -to-> (a, d) = Lit (Int64 42)
+
+Pre-Edited Flow: 
+(Variable x, ___),(Lit (Int64 42), Int64)
+(Variable f, ___),(Fun (Var z: Int64), Int64)
+(Variable a, ___),(Lit (Int64 1), Int64)
+(Variable d, ___),(Lit (String "abc"), String)
+(Variable f, ___),(Variable a, ___)
+(Variable f, ___),(Variable d, ___)
+(Variable z, Int64),(Variable a, ___)
+(Variable b, ___),(Variable x, ___)
+(Variable c, Int64),(Variable d, ___)
 
 Flows: 
-Variable x: Int32 -> ((Lit (Int32 42): Int32))
-Variable f: Int32 -> ((Fun (Var z: Int32): Body: Let b = Variable x : Int32))
-Variable a: Int32 -> ((Lit (Int32 1): Int32))
-Variable d: Int32 -> ((Lit (Int32 2): Int32))
-Variable b: Int32 -> ((Variable x: Int32) <- (Lit (Int32 42): Int32))
-Variable f: Int32 -> ((Fun (Var z: Int32): Body: Let b = Variable x : Int32))
-Variable f: Int32 -> ((Fun (Var z: Int32): Body: Let b = Variable x : Int32))
+Variable x: Int64 <- ((Lit (Int64 42): Int64)) => Flows type check
+Variable f: Int64 <- ((Fun (Var z: Int64): Int64)) => Flows type check
+Variable a: Int64 <- ((Lit (Int64 1): Int64)) => Flows type check
+Variable d: String <- ((Lit (String "abc"): String)) => Flows type check
+Variable f: Int64 <- ((Fun (Var z: Int64): Int64)) => Flows type check
+Variable f: Int64 <- ((Fun (Var z: Int64): Int64)) => Flows type check
+Variable z: Int64 <- ((Variable a: Int64) <- (Lit (Int64 1): Int64)) => Flows type check
+Variable b: Int64 <- ((Variable x: Int64) <- (Lit (Int64 42): Int64)) => Flows type check
+Variable c: Int64 <- ((Variable d: String) <- (Lit (String "abc"): String)) => Flow does not type check
 
 
 Dict: 
-(Variable f: Int32) ;(Variable d: Int32) ;(Variable b: Int32) ;(Variable x: Int32) ;(Variable a: Int32)
+(Variable f: Int64) ;(Variable d: String) ;(Variable b: Int64) ;(Variable x: Int64) ;(Variable z: Int64) ;(Variable c: Int64) ;(Variable a: Int64)
